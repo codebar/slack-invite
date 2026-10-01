@@ -30,6 +30,13 @@ function resultPage(message, isFailed = false) {
 </html>`;
 }
 
+function failClosed() {
+  return new Response(resultPage('Failed! Verification failed. Please try again.', true), {
+    status: 403,
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+}
+
 async function verifyTurnstile(token, secret) {
   const resp = await fetch(TURNSTILE_VERIFY_URL, {
     method: 'POST',
@@ -64,21 +71,30 @@ export default {
 
         if (!env.TURNSTILE_SECRET) {
           console.log({ event: 'turnstile_secret_missing' });
-          return new Response(resultPage('Failed! Verification failed. Please try again.', true), {
-            status: 403,
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
-          });
+          return failClosed();
         }
 
-        const verify = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET);
+        let verify;
+        try {
+          verify = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET);
+        } catch (error) {
+          console.log({ event: 'turnstile_verify_error', error: String(error) });
+          return failClosed();
+        }
         if (!verify.success) {
-          return new Response(resultPage('Failed! Verification failed. Please try again.', true), {
-            status: 403,
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
-          });
+          return failClosed();
         }
 
-        const slack = await sendSlackInvite(email, env.SLACK_TOKEN);
+        let slack;
+        try {
+          slack = await sendSlackInvite(email, env.SLACK_TOKEN);
+        } catch (error) {
+          console.log({ event: 'slack_unreachable', error: String(error) });
+          return new Response(
+            resultPage('Failed! Something has gone wrong. Please contact a system administrator.', true),
+            { status: 502, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          );
+        }
         if (slack.ok) {
           return new Response(
             resultPage(`Success! Check “${escapeHtml(email)}” for an invite from Slack.`),
