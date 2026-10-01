@@ -79,11 +79,12 @@ it('serves the join page from static assets', async () => {
   expect(html).toContain('<form method="post" action="/invite">');
   expect(html).toContain('name="email"');
   expect(html).toContain('cf-turnstile');
+  expect(html).toMatch(/<label[^>]*for="slack-email"/);
 });
 ```
 
 - [ ] **Step 2: Run test, verify it fails** — `npx vitest run` → FAIL (no page).
-- [ ] **Step 3: Implement** the page: codebar-branded, single email field, Turnstile widget, submit button. Styling in `public/style.css`; system font stack; no external CSS or font requests except the Turnstile script.
+- [ ] **Step 3: Implement** the page: codebar-branded, single email field, Turnstile widget, submit button. Accessibility baseline (spec Goal 4): a `<label for="slack-email">` bound to the email input, visible focus styles in `public/style.css`. Styling uses a system font stack; no external CSS or font requests except the Turnstile script.
 - [ ] **Step 4: Run tests, verify pass.**
 - [ ] **Step 5: Commit** — `feat: join page as static asset with Turnstile widget`
 
@@ -100,7 +101,7 @@ it('serves the join page from static assets', async () => {
   - `mockTurnstile({ success })` → `fetchMock.post('https://challenges.cloudflare.com/turnstile/v0/siteverify', { success })`.
   - `mockSlackInvite({ ok, error? })` → `fetchMock.post('https://codebar.slack.com/api/users.admin.invite', { ok, error })`.
   Later tasks add `mockUsersList(body)` and `mockWebhook()` (returns `{ calls, body }` recording calls) and `runScheduled()` (invokes the Worker's `scheduled` handler with a stub controller/context). Both invite-path mocks must use `fetchMock.post` because the worker issues POSTs to these endpoints; `fetchMock.get` stays reserved for the GET `users.list` call in Task 5.
-- Produces: fetch-handler flow used by Task 4: parse form body → validate email present → verify Turnstile → call Slack → map response. Result-page rendering is one internal helper, `resultPage(message, isFailed)`, returning a full HTML string; tests assert on `status` and that the body contains the fixed copy strings from Global Constraints.
+- Produces: fetch-handler flow used by Task 4: parse form body → validate email present → verify Turnstile → call Slack → map response. Result-page rendering is one internal helper, `resultPage(message, isFailed)`, returning a full HTML string whose message region uses `role="status"` so error and success outcomes are announced to assistive technology; tests assert on `status` and that the body contains the fixed copy strings from Global Constraints.
 - Mocking: use `fetchMock` from `cloudflare:test` (`fetchMock.activate()`, then method-scoped `fetchMock.get(...)`/`fetchMock.post(...)` matching each upstream's HTTP method). Slack URL pattern: `https://codebar.slack.com/api/users.admin.invite`; Turnstile: `https://challenges.cloudflare.com/turnstile/v0/siteverify`.
 
 - [ ] **Step 1: Write failing tests**
@@ -266,9 +267,9 @@ it('posts exactly one alert when users.list is unreachable', async () => {
 - Consumes: everything above. No code interfaces; this task is platform wiring plus the manual checklist the spec's cutover section requires.
 
 - [ ] **Step 1: Implement** `deploy.yml`: on push to `main`, `cloudflare/wrangler-action@v3` with `apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}` and `accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}`.
-- [ ] **Step 2: Set up (manual, once):** in the codebar Cloudflare account — create the `slack-invite` Worker, `wrangler deploy` locally first; `wrangler secret put SLACK_TOKEN` (copy value from `heroku config -a codebar-slack-invitation`), `wrangler secret put TURNSTILE_SECRET`, `wrangler secret put ALERT_WEBHOOK_URL`; create the Turnstile widget (managed, invisible mode) for hostnames `slack.codebar.io` and the temporary `*.workers.dev` hostname, install its keys; set repository secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`. Until cutover, `public/index.html` and the widget use Turnstile **test keys** (dummy always-pass key pair from Cloudflare's Turnstile docs) so the live check works on `*.workers.dev`.
-- [ ] **Step 3: Verify** — push to `main`, confirm the action deploys, submit the live form on the workers.dev URL with a controlled address, confirm the invite email arrives and the log shows `health_check_ok` after the next scheduled run (or run `wrangler triggers` / invoke manually via `wrangler dev --test-scheduled`).
-- [ ] **Step 4: Cutover (manual):** swap the Turnstile placeholder/test keys for the real keys and redeploy; on the `codebar.io` zone replace the Heroku CNAME with a proxied record for `slack.codebar.io` and add the Worker route `slack.codebar.io/*`; re-run the live form check on the production hostname.
+- [ ] **Step 2: Set up (manual, once):** in the codebar Cloudflare account — create the `slack-invite` Worker, `wrangler deploy` locally first; `wrangler secret put TURNSTILE_SECRET`, `wrangler secret put ALERT_WEBHOOK_URL`; create the Turnstile widget (managed, invisible mode) for hostnames `slack.codebar.io` and the temporary `*.workers.dev` hostname, install its keys; set repository secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`. Until cutover, `public/index.html` and the widget use Turnstile **test keys** (dummy always-pass key pair from Cloudflare's Turnstile docs) so the live check works on `*.workers.dev`. **Do not install `SLACK_TOKEN` yet** — the real, irreplaceable legacy token must never sit behind a publicly reachable invite endpoint with always-pass bot protection; this step keeps the production workspace out of reach until cutover.
+- [ ] **Step 3: Verify** — push to `main`, confirm the action deploys, submit the live form on the workers.dev URL with a controlled address against a **throwaway token from a personal test workspace** (set `SLACK_TOKEN` to the throwaway value for this check only, then `wrangler secret delete SLACK_TOKEN`), confirm the test workspace invite email arrives, and confirm the log shows `health_check_ok` after the next scheduled run (or run `wrangler triggers` / invoke manually via `wrangler dev --test-scheduled`).
+- [ ] **Step 4: Cutover (manual):** swap the Turnstile placeholder/test keys for the real keys and redeploy; `wrangler secret put SLACK_TOKEN` (copy value from `heroku config -a codebar-slack-invitation`); on the `codebar.io` zone replace the Heroku CNAME with a proxied record for `slack.codebar.io` and add the Worker route `slack.codebar.io/*`; re-run the live form check on the production hostname and confirm the real invite email arrives.
 - [ ] **Step 5: Commit** — `chore: production Turnstile keys and route`
 - [ ] **Step 6: Decommission (one week later, manual):** confirm Worker logs show successful invites over the week, then delete the `codebar-slack-invitation` Heroku app.
 
