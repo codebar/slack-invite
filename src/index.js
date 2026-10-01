@@ -53,6 +53,23 @@ async function sendSlackInvite(email, token) {
   return resp.json();
 }
 
+const SLACK_USERS_LIST_URL = 'https://codebar.slack.com/api/users.list';
+
+async function checkToken(token) {
+  const resp = await fetch(SLACK_USERS_LIST_URL + '?limit=1', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  return resp.json();
+}
+
+async function sendWebhookAlert(url, text) {
+  await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -128,6 +145,32 @@ export default {
     return new Response('Not Found', { status: 404 });
   },
   async scheduled(controller, env, ctx) {
-    // filled in Task 5
+    ctx.waitUntil(
+      (async () => {
+        try {
+          const result = await checkToken(env.SLACK_TOKEN);
+          if (result.ok) {
+            console.log({ event: 'health_check_ok' });
+            return;
+          }
+          const error = result.error || 'unknown error';
+          console.log({ event: 'health_check_failed', error });
+          if (env.ALERT_WEBHOOK_URL) {
+            await sendWebhookAlert(
+              env.ALERT_WEBHOOK_URL,
+              `slack-invite health check FAILED: ${error} (workspace: codebar)`
+            );
+          }
+        } catch (error) {
+          console.log({ event: 'health_check_failed', error: String(error) });
+          if (env.ALERT_WEBHOOK_URL) {
+            await sendWebhookAlert(
+              env.ALERT_WEBHOOK_URL,
+              `slack-invite health check FAILED: ${String(error)} (workspace: codebar)`
+            );
+          }
+        }
+      })()
+    );
   },
 };

@@ -1,6 +1,6 @@
 import { SELF, fetchMock } from 'cloudflare:test';
 
-const MOCKED_ORIGINS = ['https://challenges.cloudflare.com', 'https://codebar.slack.com'];
+const MOCKED_ORIGINS = ['https://challenges.cloudflare.com', 'https://codebar.slack.com', 'https://hooks.slack.com'];
 
 // Closing each origin's mock client drops its interceptors — registrations
 // would otherwise persist for the whole file and match before newer ones.
@@ -35,4 +35,38 @@ export function postInvite(fields, opts = {}) {
     method: 'POST',
     body: new URLSearchParams(fields),
   });
+}
+export function mockUsersList(body, { times = 1 } = {}) {
+  fetchMock.activate();
+  const client = fetchMock.get('https://codebar.slack.com');
+  for (let i = 0; i < times; i++) {
+    client.intercept({ method: 'GET', path: '/api/users.list?limit=1' }).reply(200, body);
+  }
+}
+
+export function mockWebhook() {
+  fetchMock.activate();
+  const recorder = { calls: 0, body: null };
+  fetchMock
+    .get('https://hooks.slack.com')
+    .intercept({ method: 'POST', path: '/services/test/webhook' })
+    .reply((opts) => {
+      recorder.calls += 1;
+      try {
+        recorder.body = JSON.parse(opts.body);
+      } catch {
+        recorder.body = { raw: String(opts.body) };
+      }
+      return { statusCode: 200, data: 'ok' };
+    });
+  return recorder;
+}
+
+export async function runScheduled() {
+  const { env } = await import('cloudflare:test');
+  const worker = (await import('../src/index.js')).default;
+  const deferred = [];
+  const ctx = { waitUntil: (p) => deferred.push(Promise.resolve(p)) };
+  await worker.scheduled({}, env, ctx);
+  await Promise.all(deferred);
 }
