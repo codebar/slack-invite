@@ -97,11 +97,11 @@ it('serves the join page from static assets', async () => {
 - Consumes: `env.TURNSTILE_SECRET`, `env.SLACK_TOKEN` (present in tests via pool-workers env config).
 - Produces: `test/helpers.js` — shared test helpers, extended by Tasks 4 and 5:
   - `postInvite(fields, opts = {})` → issues `SELF.fetch('https://slack.codebar.io/invite', { method: 'POST', body: new URLSearchParams(fields) })`; `opts.unsetSecret` runs the request in an env without `TURNSTILE_SECRET` (pool-workers per-test env override).
-  - `mockTurnstile({ success })` → `fetchMock.get('https://challenges.cloudflare.com/turnstile/v0/siteverify', { success })`.
-  - `mockSlackInvite({ ok, error? })` → `fetchMock.get('https://codebar.slack.com/api/users.admin.invite', { ok, error })`.
-  Later tasks add `mockUsersList(body)` and `mockWebhook()` (returns `{ calls, body }` recording calls) and `runScheduled()` (invokes the Worker's `scheduled` handler with a stub controller/context).
+  - `mockTurnstile({ success })` → `fetchMock.post('https://challenges.cloudflare.com/turnstile/v0/siteverify', { success })`.
+  - `mockSlackInvite({ ok, error? })` → `fetchMock.post('https://codebar.slack.com/api/users.admin.invite', { ok, error })`.
+  Later tasks add `mockUsersList(body)` and `mockWebhook()` (returns `{ calls, body }` recording calls) and `runScheduled()` (invokes the Worker's `scheduled` handler with a stub controller/context). Both invite-path mocks must use `fetchMock.post` because the worker issues POSTs to these endpoints; `fetchMock.get` stays reserved for the GET `users.list` call in Task 5.
 - Produces: fetch-handler flow used by Task 4: parse form body → validate email present → verify Turnstile → call Slack → map response. Result-page rendering is one internal helper, `resultPage(message, isFailed)`, returning a full HTML string; tests assert on `status` and that the body contains the fixed copy strings from Global Constraints.
-- Mocking: use `fetchMock` from `cloudflare:test` (`fetchMock.activate()`, then `fetchMock.get(url-pattern)` per upstream). Slack URL pattern: `https://codebar.slack.com/api/users.admin.invite`; Turnstile: `https://challenges.cloudflare.com/turnstile/v0/siteverify`.
+- Mocking: use `fetchMock` from `cloudflare:test` (`fetchMock.activate()`, then method-scoped `fetchMock.get(...)`/`fetchMock.post(...)` matching each upstream's HTTP method). Slack URL pattern: `https://codebar.slack.com/api/users.admin.invite`; Turnstile: `https://challenges.cloudflare.com/turnstile/v0/siteverify`.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -188,13 +188,13 @@ it('fails closed when Turnstile rejects', async () => {
 });
 
 it('fails closed when TURNSTILE_SECRET is unset', async () => {
-  const res = await postInvite({ email: 'a@b.com', unsetSecret: true });
+  const res = await postInvite({ email: 'a@b.com' }, { unsetSecret: true });
   expect(res.status).toBe(403);
 });
 
 it('returns 502 when Slack is unreachable', async () => {
   mockTurnstile({ success: true });
-  fetchMock.get('https://codebar.slack.com/api/users.admin.invite', () => { throw new Error('boom'); });
+  fetchMock.post('https://codebar.slack.com/api/users.admin.invite', () => { throw new Error('boom'); });
   const res = await postInvite({ email: 'a@b.com' });
   expect(res.status).toBe(502);
 });
