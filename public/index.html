@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Join the codebar community on Slack!</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="card">
+    <h1><strong>codebar</strong></h1>
+    <p class="header">Enter your email below to join codebar on Slack!</p>
+    <form method="post" action="/invite">
+      <label for="slack-email">Your email address</label>
+      <input type="email" name="email" id="slack-email" autofocus required
+             placeholder="Enter Your Email Address">
+      <div class="cf-turnstile" data-sitekey="SITE_KEY_PLACEHOLDER"></div>
+      <input type="submit" value="Join" class="submit">
+    </form>
+  </main>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</body>
+</html>
