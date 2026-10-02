@@ -8,7 +8,7 @@ const testBindings = {
 
 export default defineWorkersConfig({
   test: {
-    exclude: ['test/invite-nosecret.test.js', '**/node_modules/**'],
+    exclude: ['test/invite-nosecret.test.js', 'test/invite-noslack.test.js', '**/node_modules/**'],
     poolOptions: {
       workers: {
         wrangler: { configPath: './wrangler.jsonc' },

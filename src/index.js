@@ -1,5 +1,6 @@
 const SLACK_INVITE_URL = 'https://codebar.slack.com/api/users.admin.invite';
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+const SLACK_USERS_LIST_URL = 'https://codebar.slack.com/api/users.list';
 
 function escapeHtml(text) {
   return String(text)
@@ -30,11 +31,14 @@ function resultPage(message, isFailed = false) {
 </html>`;
 }
 
+const HTML_HEADERS = { 'Content-Type': 'text/html; charset=utf-8' };
+
+function htmlResponse(message, { status = 200, failed = false } = {}) {
+  return new Response(resultPage(message, failed), { status, headers: HTML_HEADERS });
+}
+
 function failClosed() {
-  return new Response(resultPage('Failed! Verification failed. Please try again.', true), {
-    status: 403,
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
-  });
+  return htmlResponse('Failed! Verification failed. Please try again.', { status: 403, failed: true });
 }
 
 async function verifyTurnstile(token, secret) {
@@ -53,8 +57,6 @@ async function sendSlackInvite(email, token) {
   return resp.json();
 }
 
-const SLACK_USERS_LIST_URL = 'https://codebar.slack.com/api/users.list';
-
 async function checkToken(token) {
   const resp = await fetch(SLACK_USERS_LIST_URL + '?limit=1', {
     headers: { Authorization: 'Bearer ' + token },
@@ -63,11 +65,15 @@ async function checkToken(token) {
 }
 
 async function sendWebhookAlert(url, text) {
-  await fetch(url, {
+  const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
   });
+  // A non-2xx (expired webhook URL, 429, 5xx) is a silently dropped alert.
+  if (!resp.ok) {
+    console.log({ event: 'alert_delivery_failed', status: resp.status });
+  }
 }
 
 export default {
@@ -76,18 +82,17 @@ export default {
     if (request.method === 'POST' && url.pathname === '/invite') {
       try {
         const form = await request.formData();
-        const email = (form.get('email') || '').trim();
-        const turnstileToken = form.get('cf-turnstile-response') || '';
+        const emailField = form.get('email');
+        const email = (typeof emailField === 'string' ? emailField : '').trim();
+        const turnstileField = form.get('cf-turnstile-response');
+        const turnstileToken = typeof turnstileField === 'string' ? turnstileField : '';
 
         if (!email) {
-          return new Response(resultPage('Failed! your email is required.', true), {
-            status: 400,
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
-          });
+          return htmlResponse('Failed! your email is required.', { status: 400, failed: true });
         }
 
-        if (!env.TURNSTILE_SECRET) {
-          console.log({ event: 'turnstile_secret_missing' });
+        if (!env.TURNSTILE_SECRET || !env.SLACK_TOKEN) {
+          console.log({ event: 'secrets_missing', turnstile_secret: !env.TURNSTILE_SECRET, slack_token: !env.SLACK_TOKEN });
           return failClosed();
         }
 
@@ -107,38 +112,29 @@ export default {
           slack = await sendSlackInvite(email, env.SLACK_TOKEN);
         } catch (error) {
           console.log({ event: 'slack_unreachable', error: String(error) });
-          return new Response(
-            resultPage('Failed! Something has gone wrong. Please contact a system administrator.', true),
-            { status: 502, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          return htmlResponse(
+            'Failed! Something has gone wrong. Please contact a system administrator.',
+            { status: 502, failed: true }
           );
         }
         if (slack.ok) {
-          return new Response(
-            resultPage(`Success! Check “${escapeHtml(email)}” for an invite from Slack.`),
-            { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-          );
+          return htmlResponse(`Success! Check “${escapeHtml(email)}” for an invite from Slack.`);
         }
         if (slack.error === 'already_invited' || slack.error === 'already_in_team') {
-          return new Response(
-            resultPage(
-              `Success! You were already invited.<br>Visit <a href="https://codebar.slack.com">codebar</a>`
-            ),
-            { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          return htmlResponse(
+            `Success! You were already invited.<br>Visit <a href="https://codebar.slack.com">codebar</a>`
           );
         }
         let message = 'Something has gone wrong. Please contact a system administrator.';
         if (slack.error === 'invalid_email') {
           message = 'The email you entered is an invalid email.';
         }
-        return new Response(resultPage(`Failed! ${message}`, true), {
-          status: 200,
-          headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        });
+        return htmlResponse(`Failed! ${message}`, { failed: true });
       } catch (error) {
         console.log({ event: 'invite_failed', error: String(error) });
-        return new Response(
-          resultPage('Failed! Something has gone wrong. Please contact a system administrator.', true),
-          { status: 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        return htmlResponse(
+          'Failed! Something has gone wrong. Please contact a system administrator.',
+          { status: 500, failed: true }
         );
       }
     }
@@ -147,27 +143,26 @@ export default {
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(
       (async () => {
+        let error;
         try {
           const result = await checkToken(env.SLACK_TOKEN);
           if (result.ok) {
             console.log({ event: 'health_check_ok' });
             return;
           }
-          const error = result.error || 'unknown error';
-          console.log({ event: 'health_check_failed', error });
-          if (env.ALERT_WEBHOOK_URL) {
+          error = result.error || 'unknown error';
+        } catch (cause) {
+          error = String(cause);
+        }
+        console.log({ event: 'health_check_failed', error });
+        if (env.ALERT_WEBHOOK_URL) {
+          try {
             await sendWebhookAlert(
               env.ALERT_WEBHOOK_URL,
               `slack-invite health check FAILED: ${error} (workspace: codebar)`
             );
-          }
-        } catch (error) {
-          console.log({ event: 'health_check_failed', error: String(error) });
-          if (env.ALERT_WEBHOOK_URL) {
-            await sendWebhookAlert(
-              env.ALERT_WEBHOOK_URL,
-              `slack-invite health check FAILED: ${String(error)} (workspace: codebar)`
-            );
+          } catch (deliveryError) {
+            console.log({ event: 'alert_delivery_failed', error: String(deliveryError) });
           }
         }
       })()
