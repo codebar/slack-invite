@@ -24,7 +24,7 @@ it('posts exactly one alert when the token is rejected', async () => {
 it('posts exactly one alert when users.list is unreachable', async () => {
   fetchMock
     .get('https://codebar.slack.com')
-    .intercept({ method: 'GET', path: '/api/users.list' })
+    .intercept({ method: 'GET', path: '/api/users.list?limit=1' })
     .reply(() => {
       throw new Error('boom');
     });

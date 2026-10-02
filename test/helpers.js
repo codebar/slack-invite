@@ -9,6 +9,9 @@ export async function resetFetchMocks() {
     await fetchMock.get(origin).close();
   }
   fetchMock.activate();
+  // Unmatched outbound calls throw instead of silently hitting the real API —
+  // a wrong interceptor path then fails loudly rather than passing by luck.
+  fetchMock.disableNetConnect();
 }
 
 // workerd's undici treats every interceptor as single-use (the `times`
