@@ -15,35 +15,88 @@ export async function resetFetchMocks() {
 }
 
 // workerd's undici treats every interceptor as single-use (the `times`
-// option is ignored), so `times: N` stacks N identical single-use
-// interceptors to serve N matching calls.
-function stackIntercepts(origin, path, body, times) {
+// option is ignored), so one interceptor is stacked per expected call.
+function stackIntercepts(origin, { method, path, times = 1, reply }) {
   fetchMock.activate();
   const client = fetchMock.get(origin);
   for (let i = 0; i < times; i++) {
-    client.intercept({ method: 'POST', path }).reply(200, body);
+    client.intercept({ method, path }).reply(reply);
   }
 }
 
-export function mockTurnstile(body, { times = 1 } = {}) {
-  stackIntercepts('https://challenges.cloudflare.com', '/turnstile/v0/siteverify', body, times);
+const jsonReply = (status, body) => () => ({ statusCode: status, data: body });
+
+// `record` (an array) captures the outbound request body of every call, so
+// tests can assert what the worker actually sends upstream.
+function maybeRecorded(reply, record) {
+  return record ? (opts) => { record.push(opts.body); return reply(opts); } : reply;
 }
 
-export function mockSlackInvite(body, { times = 1 } = {}) {
-  stackIntercepts('https://codebar.slack.com', '/api/users.admin.invite', body, times);
+function mockUpstreamJson(origin, method, path, body, { times = 1, record, status = 200 } = {}) {
+  stackIntercepts(origin, {
+    method,
+    path,
+    times,
+    reply: maybeRecorded(jsonReply(status, JSON.stringify(body)), record),
+  });
 }
 
-export function postInvite(fields, opts = {}) {
+export function mockTurnstile(body, { times = 1, record } = {}) {
+  mockUpstreamJson('https://challenges.cloudflare.com', 'POST', '/turnstile/v0/siteverify', body, { times, record });
+}
+
+export function mockSlackInvite(body, { times = 1, record } = {}) {
+  mockUpstreamJson('https://codebar.slack.com', 'POST', '/api/users.admin.invite', body, { times, record });
+}
+
+// Raw (non-JSON) upstream bodies: real siteverify/Slack responses are HTML
+// error pages or plain-text 5xx during incidents, never well-formed JSON.
+export function mockTurnstileRaw(body, { status = 200, times = 1 } = {}) {
+  stackIntercepts('https://challenges.cloudflare.com', {
+    method: 'POST',
+    path: '/turnstile/v0/siteverify',
+    times,
+    reply: jsonReply(status, body),
+  });
+}
+
+export function mockSlackInviteRaw(body, { status = 200, times = 1 } = {}) {
+  stackIntercepts('https://codebar.slack.com', {
+    method: 'POST',
+    path: '/api/users.admin.invite',
+    times,
+    reply: jsonReply(status, body),
+  });
+}
+
+export function mockTurnstileThrows() {
+  stackIntercepts('https://challenges.cloudflare.com', {
+    method: 'POST',
+    path: '/turnstile/v0/siteverify',
+    reply: () => { throw new Error('boom'); },
+  });
+}
+
+export function postInvite(fields) {
   return SELF.fetch('https://slack.codebar.io/invite', {
     method: 'POST',
     body: new URLSearchParams(fields),
   });
 }
-export function mockUsersList(body, { times = 1 } = {}) {
+
+export function postInviteRaw(headers, body) {
+  return SELF.fetch('https://slack.codebar.io/invite', { method: 'POST', headers, body });
+}
+
+export function mockUsersList(body, { times = 1, headers } = {}) {
   fetchMock.activate();
   const client = fetchMock.get('https://codebar.slack.com');
+  const options = { method: 'GET', path: '/api/users.list?limit=1' };
+  // Header matchers make the assertion discriminating: a missing or wrong
+  // Authorization header leaves the request unmatched and the test fails.
+  if (headers) options.headers = headers;
   for (let i = 0; i < times; i++) {
-    client.intercept({ method: 'GET', path: '/api/users.list?limit=1' }).reply(200, body);
+    client.intercept(options).reply(jsonReply(200, JSON.stringify(body)));
   }
 }
 

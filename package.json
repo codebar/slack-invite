@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "vitest run && vitest run -c vitest.nosecret.config.js"
+    "test": "vitest run && vitest run -c vitest.nosecret.config.js && vitest run -c vitest.noslack.config.js"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.9.0",
