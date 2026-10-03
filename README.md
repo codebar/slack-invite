@@ -18,7 +18,7 @@ This replaces the previous Heroku app (`codebar/slack-invite-automation`). It ke
 | `SLACK_TOKEN` | Legacy Slack workspace token (`xoxp-`) |
 | `ALERT_WEBHOOK_URL` | Webhook for the daily health check |
 
-The Turnstile site key sits in `public/index.html` as the placeholder `SITE_KEY_PLACEHOLDER` and gets swapped for the real key at cutover. Site keys are public, so it goes into git then.
+The Turnstile site key sits in `public/index.html`. Site keys are public, so it is in git. The secret key is `TURNSTILE_SECRET` in the secrets table above.
 
 ## Development
 
