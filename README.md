@@ -4,6 +4,8 @@ The "join codebar on Slack" page for codebar, running on Cloudflare Workers. Ser
 
 This replaces the previous Heroku app (`codebar/slack-invite-automation`). It keeps only the behaviour production actually used: the invite form and submission. Things with no traffic — the badge endpoint, reCAPTCHA, locale variants — are gone.
 
+<img width="499" height="452" alt="image" src="https://github.com/user-attachments/assets/2571fedc-4102-4ee6-bb4b-0caf661e5860" />
+
 ## How it works
 
 - `GET /` serves a static form (`public/index.html`) with a Cloudflare Turnstile widget.
