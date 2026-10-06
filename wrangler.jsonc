@@ -8,7 +8,10 @@
   },
   "observability": {
     "enabled": true
-  }
+  },
+  "routes": [
+    { "pattern": "slack.codebar.io/*", "zone_name": "codebar.io" }
+  ]
   // triggers.crons (daily health check) is added at cutover — before then the
   // real Slack token is not installed and the check would only raise false alerts.
 }
