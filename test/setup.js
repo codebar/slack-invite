@@ -1,20 +1,27 @@
 import { afterAll, afterEach, beforeAll, expect } from 'vitest';
 import { network } from './network.js';
 
-beforeAll(() => network.enable());
-
-// Unhandled outbound requests would otherwise pass through to the real
-// targets, so track them and fail the owning test instead. The old
-// fetchMock.disableNetConnect() gave us the same loudness.
+// Unhandled outbound requests are refused by the network itself ('error'
+// strategy instead of the passthrough default), so no leak ever reaches the
+// real upstreams; the tracked events then fail the owning test afterwards.
+// The old fetchMock.disableNetConnect() gave us equivalent loudness.
 const unhandled = [];
+export function clearUnhandled() {
+  unhandled.length = 0;
+}
 network.events.on('request:unhandled', ({ request }) => {
   unhandled.push(`${request.method} ${request.url}`);
+});
+
+beforeAll(async () => {
+  network.configure({ onUnhandledFrame: 'error' });
+  await network.enable();
 });
 
 afterEach(() => {
   if (unhandled.length > 0) {
     const details = unhandled.join('\n  ');
-    unhandled.length = 0;
+    clearUnhandled();
     expect.fail(`Outbound request(s) without a matching mock:\n  ${details}`);
   }
 });

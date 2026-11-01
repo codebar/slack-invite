@@ -1,9 +1,10 @@
 import { cloudflareTest } from '@cloudflare/vitest-plugin';
 import { defineConfig } from 'vitest/config';
+import { TEST_SLACK_TOKEN, TEST_WEBHOOK_URL } from './test/tokens.js';
 
 const testBindings = {
-  SLACK_TOKEN: 'test-slack-token',
-  ALERT_WEBHOOK_URL: 'https://hooks.slack.com/services/test/webhook',
+  SLACK_TOKEN: TEST_SLACK_TOKEN,
+  ALERT_WEBHOOK_URL: TEST_WEBHOOK_URL,
 };
 
 export default defineConfig({
