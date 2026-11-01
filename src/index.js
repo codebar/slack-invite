@@ -37,6 +37,15 @@ function htmlResponse(message, { status = 200, failed = false } = {}) {
   return new Response(resultPage(message, failed), { status, headers: HTML_HEADERS });
 }
 
+// One structured event per terminal branch. `slack_error` carries the verbatim
+// string for any ok:false Slack response, mapped or not — new error strings
+// Slack ships (see planner#3069) must stay visible while the page stays generic.
+function logOutcome(outcome, detail, slackError) {
+  const event = { event: 'invite_outcome', outcome, detail };
+  if (slackError !== undefined) event.slack_error = slackError;
+  console.log(event);
+}
+
 function failClosed() {
   return htmlResponse('Failed! Verification failed. Please try again.', { status: 403, failed: true });
 }
@@ -88,11 +97,13 @@ export default {
         const turnstileToken = typeof turnstileField === 'string' ? turnstileField : '';
 
         if (!email) {
+          logOutcome('failure', 'missing_email');
           return htmlResponse('Failed! your email is required.', { status: 400, failed: true });
         }
 
         if (!env.TURNSTILE_SECRET || !env.SLACK_TOKEN) {
           console.log({ event: 'secrets_missing', turnstile_secret: !env.TURNSTILE_SECRET, slack_token: !env.SLACK_TOKEN });
+          logOutcome('failure', 'secrets_missing');
           return failClosed();
         }
 
@@ -101,9 +112,11 @@ export default {
           verify = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET);
         } catch (error) {
           console.log({ event: 'turnstile_verify_error', error: String(error) });
+          logOutcome('failure', 'verification_error');
           return failClosed();
         }
         if (!verify.success) {
+          logOutcome('failure', 'verification_failed');
           return failClosed();
         }
 
@@ -112,15 +125,18 @@ export default {
           slack = await sendSlackInvite(email, env.SLACK_TOKEN);
         } catch (error) {
           console.log({ event: 'slack_unreachable', error: String(error) });
+          logOutcome('failure', 'slack_unreachable');
           return htmlResponse(
             'Failed! Something has gone wrong. Please contact a system administrator.',
             { status: 502, failed: true }
           );
         }
         if (slack.ok) {
+          logOutcome('success', 'invited');
           return htmlResponse(`Success! Check “${escapeHtml(email)}” for an invite from Slack.`);
         }
         if (slack.error === 'already_invited' || slack.error === 'already_in_team') {
+          logOutcome('success', 'slack_error', slack.error);
           return htmlResponse(
             `Success! You were already invited.<br>Visit <a href="https://codebar.slack.com">codebar</a>`
           );
@@ -129,9 +145,13 @@ export default {
         if (slack.error === 'invalid_email') {
           message = 'The email you entered is an invalid email.';
         }
+        // Slack has been observed to answer ok:false without an error field;
+        // keep slack_error present so the event never loses its payload.
+        logOutcome('failure', 'slack_error', String(slack.error ?? '(no error field)'));
         return htmlResponse(`Failed! ${message}`, { failed: true });
       } catch (error) {
         console.log({ event: 'invite_failed', error: String(error) });
+        logOutcome('failure', 'unexpected_error');
         return htmlResponse(
           'Failed! Something has gone wrong. Please contact a system administrator.',
           { status: 500, failed: true }

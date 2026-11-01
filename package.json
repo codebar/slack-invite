@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "vitest run && vitest run -c vitest.nosecret.config.js && vitest run -c vitest.noslack.config.js && vitest run -c vitest.node.config.js"
+    "test": "vitest run && vitest run -c vitest.nosecret.config.js && vitest run -c vitest.noslack.config.js && vitest run -c vitest.node.config.js && vitest run -c vitest.harness.config.js"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.11",

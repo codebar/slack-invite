@@ -3,3 +3,4 @@ node_modules/
 .superpowers/
 .pi/
 .secrets.choice
+.dev.vars
