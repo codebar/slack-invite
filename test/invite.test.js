@@ -1,5 +1,4 @@
 import { it, expect, beforeEach } from 'vitest';
-import { fetchMock, SELF } from 'cloudflare:test';
 import {
   postInvite,
   postInviteRaw,
@@ -8,6 +7,7 @@ import {
   mockTurnstileRaw,
   mockSlackInviteRaw,
   mockTurnstileThrows,
+  mockSlackInviteThrows,
   resetFetchMocks,
 } from './helpers.js';
 
@@ -124,14 +124,9 @@ it('returns 502 when Slack answers 200 with a non-JSON body', async () => {
   expect(res.status).toBe(502);
 });
 
-it('returns 502 when Slack is unreachable', async () => {
+it('returns 502 when the Slack call fails before a JSON answer', async () => {
   mockTurnstile({ success: true });
-  fetchMock
-    .get('https://codebar.slack.com')
-    .intercept({ method: 'POST', path: '/api/users.admin.invite' })
-    .reply(() => {
-      throw new Error('boom');
-    });
+  mockSlackInviteThrows();
   const res = await postInvite({ email: 'a@b.com' });
   expect(res.status).toBe(502);
 });

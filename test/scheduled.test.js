@@ -1,6 +1,5 @@
 import { it, expect, beforeEach } from 'vitest';
-import { fetchMock } from 'cloudflare:test';
-import { mockUsersList, mockWebhook, runScheduled, resetFetchMocks } from './helpers.js';
+import { mockUsersList, mockWebhook, mockUsersListThrows, mockWebhookThrows, runScheduled, resetFetchMocks } from './helpers.js';
 
 beforeEach(async () => {
   await resetFetchMocks();
@@ -30,13 +29,8 @@ it('posts exactly one alert when the token is rejected', async () => {
   expect(webhook.body.text).toContain('slack-invite health check FAILED');
 });
 
-it('posts exactly one alert when users.list is unreachable', async () => {
-  fetchMock
-    .get('https://codebar.slack.com')
-    .intercept({ method: 'GET', path: '/api/users.list?limit=1' })
-    .reply(() => {
-      throw new Error('boom');
-    });
+it('posts exactly one alert when users.list fails before a JSON answer', async () => {
+  mockUsersListThrows();
   const webhook = mockWebhook();
   await runScheduled();
   expect(webhook.calls).toBe(1);
@@ -44,11 +38,6 @@ it('posts exactly one alert when users.list is unreachable', async () => {
 
 it('posts exactly one alert and keeps the token-failure text when the webhook throws', async () => {
   mockUsersList({ ok: false, error: 'invalid_auth' });
-  fetchMock
-    .get('https://hooks.slack.com')
-    .intercept({ method: 'POST', path: '/services/test/webhook' })
-    .reply(() => {
-      throw new Error('boom');
-    });
+  mockWebhookThrows();
   await runScheduled();
 });

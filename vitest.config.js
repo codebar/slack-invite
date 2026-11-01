@@ -1,4 +1,5 @@
-import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
+import { cloudflareTest } from '@cloudflare/vitest-plugin';
+import { defineConfig } from 'vitest/config';
 
 const testBindings = {
   SLACK_TOKEN: 'test-slack-token',
@@ -6,14 +7,15 @@ const testBindings = {
   ALERT_WEBHOOK_URL: 'https://hooks.slack.com/services/test/webhook',
 };
 
-export default defineWorkersConfig({
+export default defineConfig({
+  plugins: [
+    cloudflareTest({
+      wrangler: { configPath: './wrangler.jsonc' },
+      miniflare: { bindings: testBindings },
+    }),
+  ],
   test: {
     exclude: ['test/invite-nosecret.test.js', 'test/invite-noslack.test.js', '**/node_modules/**'],
-    poolOptions: {
-      workers: {
-        wrangler: { configPath: './wrangler.jsonc' },
-        miniflare: { bindings: testBindings },
-      },
-    },
+    setupFiles: ['./test/setup.js'],
   },
 });

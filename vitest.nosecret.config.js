@@ -1,20 +1,20 @@
-import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
+import { cloudflareTest } from '@cloudflare/vitest-plugin';
+import { defineConfig } from 'vitest/config';
 
-// Dedicated project for the fail-closed test: TURNSTILE_SECRET is deliberately
-// absent from bindings. Excluded from the default suite (see vitest.config.js).
-export default defineWorkersConfig({
+const testBindings = {
+  SLACK_TOKEN: 'test-slack-token',
+  ALERT_WEBHOOK_URL: 'https://hooks.slack.com/services/test/webhook',
+};
+
+export default defineConfig({
+  plugins: [
+    cloudflareTest({
+      wrangler: { configPath: './wrangler.jsonc' },
+      miniflare: { bindings: testBindings },
+    }),
+  ],
   test: {
     include: ['test/invite-nosecret.test.js'],
-    poolOptions: {
-      workers: {
-        wrangler: { configPath: './wrangler.jsonc' },
-        miniflare: {
-          bindings: {
-            SLACK_TOKEN: 'test-slack-token',
-            ALERT_WEBHOOK_URL: 'https://hooks.slack.com/services/test/webhook',
-          },
-        },
-      },
-    },
+    setupFiles: ['./test/setup.js'],
   },
 });
