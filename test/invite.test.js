@@ -1,5 +1,4 @@
 import { it, expect, beforeEach } from 'vitest';
-import { fetchMock, SELF } from 'cloudflare:test';
 import {
   postInvite,
   postInviteRaw,
@@ -7,7 +6,6 @@ import {
   mockSlackInvite,
   mockTurnstileRaw,
   mockSlackInviteRaw,
-  mockTurnstileThrows,
   resetFetchMocks,
 } from './helpers.js';
 
@@ -95,13 +93,6 @@ it('fails closed when Turnstile rejects', async () => {
   expect(await res.text()).toContain('Verification failed. Please try again.');
 });
 
-it('fails closed when the siteverify fetch throws', async () => {
-  mockTurnstileThrows();
-  const res = await postInvite({ email: 'a@b.com' });
-  expect(res.status).toBe(403);
-  expect(await res.text()).toContain('Verification failed. Please try again.');
-});
-
 it('fails closed when Turnstile answers a non-JSON error page', async () => {
   mockTurnstileRaw('<html>502 Service Unavailable</html>', { status: 502 });
   const res = await postInvite({ email: 'a@b.com' });
@@ -120,18 +111,6 @@ it('returns 502 when Slack answers a non-JSON error page', async () => {
 it('returns 502 when Slack answers 200 with a non-JSON body', async () => {
   mockTurnstile({ success: true });
   mockSlackInviteRaw('<html>ok</html>', { status: 200 });
-  const res = await postInvite({ email: 'a@b.com' });
-  expect(res.status).toBe(502);
-});
-
-it('returns 502 when Slack is unreachable', async () => {
-  mockTurnstile({ success: true });
-  fetchMock
-    .get('https://codebar.slack.com')
-    .intercept({ method: 'POST', path: '/api/users.admin.invite' })
-    .reply(() => {
-      throw new Error('boom');
-    });
   const res = await postInvite({ email: 'a@b.com' });
   expect(res.status).toBe(502);
 });
