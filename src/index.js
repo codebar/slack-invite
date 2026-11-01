@@ -145,7 +145,9 @@ export default {
         if (slack.error === 'invalid_email') {
           message = 'The email you entered is an invalid email.';
         }
-        logOutcome('failure', 'slack_error', slack.error);
+        // Slack has been observed to answer ok:false without an error field;
+        // keep slack_error present so the event never loses its payload.
+        logOutcome('failure', 'slack_error', String(slack.error ?? '(no error field)'));
         return htmlResponse(`Failed! ${message}`, { failed: true });
       } catch (error) {
         console.log({ event: 'invite_failed', error: String(error) });
