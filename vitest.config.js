@@ -17,9 +17,10 @@ export default defineConfig({
   ],
   test: {
     // invite-nosecret/noslack run under their own configs (secret-binding
-    // variants); test/config-pin.test.js runs on the Node side (reads config
-    // files with fs) and fails here under the plugin runtime.
-    exclude: ['test/invite-nosecret.test.js', 'test/invite-noslack.test.js', 'test/config-pin.test.js', '**/node_modules/**'],
+    // variants); test/logs.test.js and test/config-pin.test.js run on the
+    // Node side (createTestHarness needs Node; config-pin reads config files
+    // with fs) and fail here under the plugin runtime.
+    exclude: ['test/invite-nosecret.test.js', 'test/invite-noslack.test.js', 'test/logs.test.js', 'test/config-pin.test.js', '**/node_modules/**'],
     setupFiles: ['./test/setup.js'],
   },
 });
